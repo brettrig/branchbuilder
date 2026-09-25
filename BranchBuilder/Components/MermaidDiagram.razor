@@ -1,0 +1,83 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div id="@_elementId" class="mermaid-diagram"></div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Diagram { get; set; } = string.Empty;
+
+    private static readonly TimeSpan RenderDebounceDelay = TimeSpan.FromMilliseconds(500);
+
+    private readonly string _elementId = $"mermaid-{Guid.NewGuid():N}";
+    private IJSObjectReference? _module;
+    private string? _renderedDiagram;
+    private string? _scheduledDiagram;
+    private CancellationTokenSource? _debounceCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/MermaidDiagram.razor.js");
+        }
+
+        if (_module is not null && !string.IsNullOrWhiteSpace(Diagram) && _scheduledDiagram != Diagram)
+        {
+            _scheduledDiagram = Diagram;
+            ScheduleRender(Diagram);
+        }
+    }
+
+    private void ScheduleRender(string diagram)
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+
+        var cts = new CancellationTokenSource();
+        _debounceCts = cts;
+
+        _ = DebounceAndRenderAsync(diagram, cts.Token);
+    }
+
+    private async Task DebounceAndRenderAsync(string diagram, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(RenderDebounceDelay, cancellationToken);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested || _module is null || _renderedDiagram == diagram)
+        {
+            return;
+        }
+
+        _renderedDiagram = diagram;
+
+        try
+        {
+            // Marshal back onto the component's synchronization context, since
+            // this continuation resumes after Task.Delay on a different context.
+            await InvokeAsync(() => _module.InvokeVoidAsync("renderDiagram", _elementId, diagram).AsTask());
+        }
+        catch (ObjectDisposedException)
+        {
+            // The component was disposed before the debounce elapsed.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+    }
+}

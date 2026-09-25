@@ -1,0 +1,54 @@
+﻿@page "/"
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+<div class="diagram-editor-layout">
+    <div class="diagram-editor-column">
+        <MermaidDiagram Diagram="@Diagram" />
+    </div>
+    <div class="diagram-editor-column">
+        <h2>Steps</h2>
+
+        <p class="step-list-hint">Enter one MermaidJS instruction per line. The diagram updates as you type.</p>
+
+        <textarea class="step-textarea"
+                  rows="10"
+                  @bind:get="_instructionsText"
+                  @bind:set="OnInstructionsChanged"
+                  @bind:event="oninput"
+                  placeholder="gitGraph&#10;commit&#10;branch develop"></textarea>
+    </div>
+</div>
+
+@code {
+    private string _instructionsText = string.Join(
+        Environment.NewLine,
+        "gitGraph",
+        "commit",
+        "branch develop",
+        "checkout develop",
+        "commit",
+        "checkout main",
+        "merge develop");
+
+    private string Diagram => BuildDiagram();
+
+    private void OnInstructionsChanged(string? value)
+    {
+        _instructionsText = value ?? string.Empty;
+    }
+
+    private string BuildDiagram()
+    {
+        var lines = _instructionsText
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+
+        return string.Join(Environment.NewLine, lines);
+    }
+}
